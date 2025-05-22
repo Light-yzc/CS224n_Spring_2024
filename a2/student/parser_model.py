@@ -47,9 +47,9 @@ class ParserModel(nn.Module):
         self.embed_size = embeddings.shape[1]
         self.hidden_size = hidden_size
         self.embeddings = nn.Parameter(torch.tensor(embeddings))
-
+        print('self embedding' + str(self.embeddings.shape))
         ### YOUR CODE HERE (~9-10 Lines)
-        ### TODO:
+        ### TODO: 
         ###     1) Declare `self.embed_to_hidden_weight` and `self.embed_to_hidden_bias` as `nn.Parameter`.
         ###        Initialize weight with the `nn.init.xavier_uniform_` function and bias with `nn.init.uniform_`
         ###        with default parameters.
@@ -72,10 +72,18 @@ class ParserModel(nn.Module):
         ###     Dropout: https://pytorch.org/docs/stable/nn.html#dropout-layers
         ### 
         ### See the PDF for hints.
+        input_features = n_features * self.embed_size
+        self.emb_to_hidden_weight = nn.Parameter(torch.empty(input_features, hidden_size))
+        self.emb_to_hidden_bias = nn.Parameter(torch.empty(hidden_size))
+        self.hidden_to_logits_weight = nn.Parameter(torch.empty(hidden_size, n_classes))
+        self.hidden_to_logits_bias = nn.Parameter(torch.empty(n_classes))
 
+        nn.init.xavier_uniform_(self.emb_to_hidden_weight)
+        nn.init.uniform_(self.emb_to_hidden_bias)
+        nn.init.xavier_uniform_(self.hidden_to_logits_weight)
+        nn.init.uniform_(self.hidden_to_logits_bias)
 
-
-
+        self.dropout = nn.Dropout(self.dropout_prob)
         ### END YOUR CODE
 
     def embedding_lookup(self, w):
@@ -106,8 +114,9 @@ class ParserModel(nn.Module):
         ###     Gather: https://pytorch.org/docs/stable/torch.html#torch.gather
         ###     View: https://pytorch.org/docs/stable/tensors.html#torch.Tensor.view
         ###     Flatten: https://pytorch.org/docs/stable/generated/torch.flatten.html
-
-
+        x = torch.index_select(self.embeddings, dim=0, index=w.reshape(-1))
+        x = x.reshape(w.shape[0],-1) # (b, feat * embed)
+        
 
         ### END YOUR CODE
         return x
@@ -143,18 +152,21 @@ class ParserModel(nn.Module):
         ### Please see the following docs for support:
         ###     Matrix product: https://pytorch.org/docs/stable/torch.html#torch.matmul
         ###     ReLU: https://pytorch.org/docs/stable/nn.html?highlight=relu#torch.nn.functional.relu
-
-
+        x = self.embedding_lookup(w) # (bs, n_feature * embed_size)
+        linear = torch.matmul(x, self.emb_to_hidden_weight) + self.emb_to_hidden_bias
+        Relu = F.relu(linear)
+        dropout = self.dropout(Relu)
+        logits = torch.matmul(dropout, self.hidden_to_logits_weight) + self.hidden_to_logits_bias
         ### END YOUR CODE
         return logits
 
 
 if __name__ == "__main__":
 
-    parser = argparse.ArgumentParser(description='Simple sanity check for parser_model.py')
-    parser.add_argument('-e', '--embedding', action='store_true', help='sanity check for embeding_lookup function')
-    parser.add_argument('-f', '--forward', action='store_true', help='sanity check for forward function')
-    args = parser.parse_args()
+    # parser = argparse.ArgumentParser(description='Simple sanity check for parser_model.py')
+    # parser.add_argument('-e', '--embedding', action='store_true', help='sanity check for embeding_lookup function')
+    # parser.add_argument('-f', '--forward', action='store_true', help='sanity check for forward function')
+    # args = parser.parse_args()
 
     embeddings = np.zeros((100, 30), dtype=np.float32)
     model = ParserModel(embeddings)
@@ -162,20 +174,25 @@ if __name__ == "__main__":
     def check_embedding():
         inds = torch.randint(0, 100, (4, 36), dtype=torch.long)
         selected = model.embedding_lookup(inds)
+        print(selected)
+        print(np.all(selected.data.numpy() == 0))
         assert np.all(selected.data.numpy() == 0), "The result of embedding lookup: " \
                                       + repr(selected) + " contains non-zero elements."
-
     def check_forward():
         inputs =torch.randint(0, 100, (4, 36), dtype=torch.long)
         out = model(inputs)
         expected_out_shape = (4, 3)
+        print(out.shape == expected_out_shape)
+        print("The result shape of forward is: " + repr(out.shape))
+        print(out)
         assert out.shape == expected_out_shape, "The result shape of forward is: " + repr(out.shape) + \
                                                 " which doesn't match expected " + repr(expected_out_shape)
+    # check_embedding()
+    check_forward()
+    # if args.embedding:
+    #     check_embedding()
+    #     print("Embedding_lookup sanity check passes!")
 
-    if args.embedding:
-        check_embedding()
-        print("Embedding_lookup sanity check passes!")
-
-    if args.forward:
-        check_forward()
-        print("Forward sanity check passes!")
+    # if args.forward:
+    #     check_forward()
+    #     print("Forward sanity check passes!")
