@@ -41,9 +41,9 @@ def precompute_rotary_emb(dim, max_positions):
     rope_cache =  torch.zeros(size=(max_positions, dim//2, 2))
     for i in range(max_positions):
         for j in range(1, dim // 2 + 1):
-            theta_i = 1 / (10000 ** (-2*(j-1)/dim))
-            cos = math.cos(theta_i)
-            sin = math.sin(theta_i)
+            theta_i = 10000 ** (-2*(j-1)/dim)
+            cos = math.cos(theta_i * i)
+            sin = math.sin(theta_i * i)
             rope_cache[i, j - 1, :] = torch.tensor([cos, sin])
     ### END YOUR CODE ###
     return rope_cache
@@ -75,9 +75,7 @@ def apply_rotary_emb(x, rope_cache):
     for _ in range(dim_gap):
         rope_cache = rope_cache.unsqueeze(0) # change it to (..., seq_len , dim / 2) to mul
     rotated_x = rotated_x * rope_cache
-    # print(rotated_x.shape)
     rotated_x = torch.view_as_real(rotated_x).view(x_shape)
-    # print(rotated_x.shape)
     ### END YOUR CODE ###
     return rotated_x
 
@@ -105,7 +103,7 @@ class CausalSelfAttention(nn.Module):
             # Hint: The maximum sequence length is given by config.block_size.
             rope_cache = None
             ### YOUR CODE HERE ###
-            rope_cache = precompute_rotary_emb(config.n_embd, config.block_size)
+            rope_cache = precompute_rotary_emb(config.n_embd // config.n_head, config.block_size)
             # print(rope_cache.shape)
             ### END YOUR CODE ###
 
