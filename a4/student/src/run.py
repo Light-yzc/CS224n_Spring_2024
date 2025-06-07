@@ -67,13 +67,15 @@ if args.variant == 'vanilla':
     # TODO: [part c] Make some model here
     ### YOUR CODE HERE ###
     model = models.GPT(mconf).to(device)
-    pass
+    
     ### END YOUR CODE ###
 elif args.variant == 'rope':
     # TODO: [part g] Make some other model here
     # set mconf.rope parameter
     ### YOUR CODE HERE ###
-    pass
+    mconf.rope = True
+    model = models.GPT(mconf).to(device)
+
     ### END YOUR CODE ###
 else:
     raise ValueError("Unknown model variant")
@@ -167,7 +169,9 @@ elif args.function == 'finetune':
                 writer=writer
         )
     else:
+        model.load_state_dict(torch.load(args.reading_params_path)) # remember to load model_params if it has pretrained!
         tconf = trainer.TrainerConfig(
+                max_epochs=10,
                 batch_size=256,
                 learning_rate=args.finetune_lr,
                 lr_decay=True,

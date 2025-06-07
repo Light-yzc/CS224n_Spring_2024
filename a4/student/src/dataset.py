@@ -98,56 +98,67 @@ class CharCorruptionDataset(Dataset):
     def __len__(self):
         return len(self.data)
 
-
+    
     # def __getitem__(self, idx):
     #     # TODO [part e]: see spec above
     #     ### YOUR CODE HERE ###
-    #     doc = self.data[idx]
-    #     length = random.randint(4, int(self.block_size * 7 / 8))
-    #     truncated_doc = list(doc[0 : length])
-
-    #     # generate a random variable with mean 0.25, ranges from 0 to 1
-    #     masked_length = int(np.random.beta(1, 3) * len(truncated_doc)) 
-    #     start = random.randint(0, len(truncated_doc) - masked_length)
-    #     prefix = truncated_doc[0:start]
-    #     masked_content = truncated_doc[start:start+masked_length]
-    #     suffix = truncated_doc[start+masked_length:]
-
-    #     masked_string = prefix + [self.MASK_CHAR] * masked_length + suffix + [self.MASK_CHAR] + masked_content
-    #     masked_string = masked_string + [self.PAD_CHAR] * (self.block_size + 1 - len(masked_string))
-    #     masked_string = masked_string[:129]
-
-    #     x = masked_string[:-1]
-    #     y = masked_string[1:]
-
-    #     x = torch.tensor([self.stoi[c] for c in x], dtype=torch.long)
-    #     y = torch.tensor([self.stoi[c] for c in y], dtype=torch.long)
-
-    #     # print(f"Sample {idx}: x size = {x.size()}, y size = {y.size()}")
-        
-    #     return x, y
-    
+    #     data = self.data[idx]
+    #     truncate_len = random.randint(4, int(self.block_size*7/8))
+    #     if len(data) > truncate_len:
+    #         data = data[:truncate_len]
+    #     split_len = int(random.gauss(len(data)/4,0.5))
+    #     start = random.randint(0, (len(data) - split_len))
+    #     prefix = data[:start]
+    #     masked_content = data[start+1:start+1+split_len]
+    #     suffix = data[start+2+split_len:]
+    #     new_data = prefix + self.MASK_CHAR + suffix + self.MASK_CHAR + masked_content
+    #     pad_data = new_data + self.PAD_CHAR * (self.block_size - len(new_data) + 1)
+    #     x_str = list(pad_data[:-1])
+    #     y_str = pad_data[1:]
+    #     x = torch.tensor([self.stoi[ch] for ch in x_str],dtype=torch.long)
+    #     y = torch.tensor([self.stoi[ch] for ch in y_str], dtype=torch.long)
+    #     return x,y
+    #     ### END YOUR CODE ###
     def __getitem__(self, idx):
-        # TODO [part e]: see spec above
-        ### YOUR CODE HERE ###
-        data = self.data[idx]
-        truncate_len = random.randint(4, int(self.block_size*7/8))
-        if len(data) > truncate_len:
-            data = data[:truncate_len]
-        split_len = int(random.gauss(len(data)/4,0.5))
-        start = random.randint(0, (len(data) - split_len))
-        prefix = data[:start]
-        masked_content = data[start+1:start+1+split_len]
-        suffix = data[start+2+split_len:]
-        new_data = prefix + self.MASK_CHAR + suffix + self.MASK_CHAR + masked_content
-        pad_data = new_data + self.PAD_CHAR * (self.block_size - len(new_data) + 1)
-        x_str = list(pad_data[:-1])
-        y_str = pad_data[1:]
-        x = torch.tensor([self.stoi[ch] for ch in x_str],dtype=torch.long)
-        y = torch.tensor([self.stoi[ch] for ch in y_str], dtype=torch.long)
-        return x,y
-        ### END YOUR CODE ###
+        doc = self.data[idx]
+        max_len = int(self.block_size * 7 / 8)
+        length = random.randint(4, max_len)
+        truncated_doc = doc[:length]  # 保持字符串类型
 
+        # 确保 masked_length ∈ [1, len(doc)-1]
+        masked_length = max(1, min(
+            len(truncated_doc)-1, 
+            int(np.random.beta(1, 3) * len(truncated_doc))
+        ))
+        start = random.randint(0, len(truncated_doc) - masked_length)
+        
+        prefix = truncated_doc[:start]
+        masked_content = truncated_doc[start:start+masked_length]
+        suffix = truncated_doc[start+masked_length:]
+        
+        # 修正：单 MASK_CHAR 占位
+        masked_string = (
+            prefix + 
+            self.MASK_CHAR + 
+            suffix + 
+            self.MASK_CHAR + 
+            masked_content
+        )
+        
+        # 动态填充/截断
+        if len(masked_string) < self.block_size + 1:
+            masked_string += self.PAD_CHAR * (self.block_size + 1 - len(masked_string))
+        else:
+            masked_string = masked_string[:self.block_size+1]
+        
+        # 构建 (x,y)
+        x_str = masked_string[:-1]
+        y_str = masked_string[1:]
+        
+        # 编码
+        x = torch.tensor([self.stoi[c] for c in x_str], dtype=torch.long)
+        y = torch.tensor([self.stoi[c] for c in y_str], dtype=torch.long)
+        return x, y
 
 # The input-output pairs (x, y) of the NameDataset are of the following form:
 
@@ -212,9 +223,17 @@ if __name__ == '__main__':
     elif args.dataset_type == 'charcorruption':
         corruption_dataset = CharCorruptionDataset(
             open('wiki.txt', encoding='utf-8').read(), 128)
+        name_dataset = NameDataset(corruption_dataset,
+            open('birth_places_train.tsv', encoding='utf-8').read())
         for _, example in zip(range(4), corruption_dataset):
             x, y = example
+            print(len(x))
             print('x:', ''.join([corruption_dataset.itos[int(c)] for c in x]))
             print('y:', ''.join([corruption_dataset.itos[int(c)] for c in y]))
+        for _, example in zip(range(4), name_dataset):
+            x, y = example
+            print(len(x))
+            print('x:', ''.join([name_dataset.itos[int(c)] for c in x]))
+            print('y:', ''.join([name_dataset.itos[int(c)] for c in y]))
     else:
         raise ValueError(f"Unknown dataset type in command line args: {args.dataset_type}")
